@@ -5,13 +5,15 @@
   var Recorder = function(source, cfg){
     var config = cfg || {};
     var bufferLen = config.bufferLen || 4096;
+    var numChannels = config.numChannels || 2;
     this.context = source.context;
-    this.node = this.context.createJavaScriptNode(bufferLen, 2, 2);
+    this.node = this.context.createJavaScriptNode(bufferLen, numChannels, numChannels);
     var worker = new Worker(config.workerPath || WORKER_PATH);
     worker.postMessage({
       command: 'init',
       config: {
-        sampleRate: this.context.sampleRate
+        sampleRate: this.context.sampleRate,
+        numChannels: numChannels
       }
     });
     var recording = false,
@@ -19,12 +21,13 @@
 
     this.node.onaudioprocess = function(e){
       if (!recording) return;
+      var buffer = [];
+      for (var channel = 0; channel < numChannels; channel++){
+          buffer.push(e.inputBuffer.getChannelData(channel));
+      }
       worker.postMessage({
         command: 'record',
-        buffer: [
-          e.inputBuffer.getChannelData(0),
-          e.inputBuffer.getChannelData(1)
-        ]
+        buffer: buffer
       });
     }
 
@@ -48,7 +51,7 @@
       worker.postMessage({ command: 'clear' });
     }
 
-    this.getBuffer = function(cb) {
+    this.getBuffer = function(cb){
       currCallback = cb || config.callback;
       worker.postMessage({ command: 'getBuffer' })
     }
